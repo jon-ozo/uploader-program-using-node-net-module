@@ -4,30 +4,39 @@ const { join } = require('node:path');
 
 const PORT = 3005;
 const server = createServer();
-let writeFileHandle, writeFileStream;
 
 server.on('connection', (socket) => {
+	let writeFileHandle, writeFileStream, fileName;
 	console.log('New client connection');
 
 	socket.on('data', async (chunk) => {
-		if (!writeFileHandle) {
-			socket.pause();
-
-			writeFileHandle = await open(join(__dirname, 'uploads', 'test.txt'), 'w');
-			writeFileStream = writeFileHandle.createWriteStream();
-			writeFileStream.write(chunk);
-
-			writeFileStream.on('drain', () => {
-				socket.resume();
-			});
+		if (chunk.toString('utf-8').includes('file-name')) {
+			fileName = chunk.toString('utf-8').slice(11);
 		} else {
-			if (!writeFileStream.write(chunk)) {
+			if (!writeFileHandle) {
 				socket.pause();
+
+				writeFileHandle = await open(join(__dirname, 'uploads', fileName), 'w');
+				writeFileStream = writeFileHandle.createWriteStream();
+				writeFileStream.write(chunk);
+
+				writeFileStream.on('drain', () => {
+					socket.resume();
+				});
+			} else {
+				if (!writeFileStream.write(chunk)) {
+					socket.pause();
+				}
 			}
 		}
 	});
 
 	socket.on('end', () => {
+		if (!writeFileHandle) {
+			console.log('Connection closed');
+			return;
+		}
+
 		writeFileHandle.close();
 		writeFileHandle = null;
 		writeFileStream = null;
